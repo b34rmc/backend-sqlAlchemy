@@ -1,6 +1,7 @@
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 from db import db
+import marshmallow as ma
 
 class Organizations(db.Model):
     __tablename__ = 'organizations'
@@ -12,6 +13,8 @@ class Organizations(db.Model):
     active = db.Column(db.Boolean(), nullable=False, default=True)
     type = db.Column(db.String())
     
+    users = db.relationship('Users', back_populates='organization')
+    
     def __init__(self, name, phone, city, state, active, type):
         self.name = name
         self.phone = phone
@@ -19,3 +22,12 @@ class Organizations(db.Model):
         self.state = state
         self.active = active
         self.type = type
+        
+class OrganizationsSchema(ma.Schema):
+    class Meta:
+        fields = ['org_id', 'name', 'phone', 'city','state', 'active', 'type', 'users']
+    
+    users = ma.fields.Nested('UsersSchema', only=['user_id', 'first_name', 'last_name'], many=True)
+
+org_schema = OrganizationsSchema()
+orgs_schema = OrganizationsSchema(many=True)

@@ -2,9 +2,11 @@ import psycopg2
 from flask import Flask, jsonify, request, Blueprint
 from sqlalchemy.orm import joinedload
 from uuid import UUID
-from models.user_model import Users
+from models.user_model import Users, user_schema, users_schema
 from models.org_model import Organizations
 from db import db
+
+from app import get_user_from_object
 
 app_users = Blueprint('app_users', __name__)
 
@@ -19,118 +21,47 @@ def add_user():
     phone = data.get('phone')
     email = data.get('email')
     city = data.get('city')
-    state = data.get('state')
-    active = data.get('active')
-    
-    new_user = Users(
-        first_name=first_name,
-        last_name=last_name,
-        org_id=org_id,
-        phone=phone,
-        email=email,
-        city=city,
-        state=state,
-        active=active
-    )
+    state = data.get('state')   
+    active = data.get('active') 
     
     if not all([first_name, last_name, org_id, phone, email, city, state]):
         return jsonify("all fields are required"), 400
     
-    db.session.add(new_user)
+    new_user_record = Users(first_name, last_name, org_id, phone, email, city, state, active)
+    db.session.add(new_user_record)
     db.session.commit()
-    return jsonify('user added'), 201
+
+    return jsonify(user_schema.dump(new_user_record)), 200
 
 
 @app_users.route('/users', methods=['GET'])
 def get_users():
-    all_users = db.session.query(Users, Organizations).join(Organizations, Users.org_id == Organizations.org_id).order_by(Users.user_id.asc()).all() 
-     
+    all_users = db.session.query(Users).all() 
+    
     if all_users:
-        users = []
-        for u, o in all_users:
-            user_record = {
-                "user_id": u.user_id,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "organization": {
-                    "name": o.name,
-                    "phone": o.phone,
-                    "city": o.city,
-                    "state": o.state,
-                    "active": o.active,
-                    "type": o.type,
-                    "org_id": o.org_id
-                },
-                "phone": u.phone,
-                "email": u.email,
-                "city": u.city,
-                "state": u.state,
-                "active": u.active
-            }
-            users.append(user_record)
-        return jsonify(users), 200
+        return jsonify(users_schema.dump(all_users)), 200
     
     return jsonify("no users found", 404)
 
+
 @app_users.route('/user/<user_id>', methods=['GET'])
 def get_user_by_id(user_id):
-    user = db.session.query(Users, Organizations).filter_by(user_id=user_id).join(Organizations, Users.org_id == Organizations.org_id).all()
-    if user:
-        user_obj = []
-        for u, o in user:
-            user_record = {
-                "user_id": u.user_id,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "organization": {
-                    "name": o.name,
-                    "phone": o.phone,
-                    "city": o.city,
-                    "state": o.state,
-                    "active": o.active,
-                    "type": o.type,
-                    "org_id": o.org_id
-                },
-                "phone": u.phone,
-                "email": u.email,
-                "city": u.city,
-                "state": u.state,
-                "active": u.active
-            }
-            user_obj.append(user_record)
-        return jsonify(user_obj)
-    return jsonify("no user found with the user_id ", user_id), 404
+    user_record = db.session.query(Users).filter_by(user_id=user_id).first()
+    
+    if user_record:
+        return jsonify(user_schema.dump(user_record)), 200
+    
+    return jsonify("User not found"), 404
 
 
 @app_users.route('/users/active')
 def get_all_active_users():
-    users = db.session.query(Users, Organizations).filter(Users.active == True).join(Organizations, Users.org_id == Organizations.org_id).all()
+    users = db.session.query(Users).filter(Users.active == True).all()
     
     if users:
-        active_users = []
-        for u, o in users:
-            user_record = {
-                "user_id": u.user_id,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "organization": {
-                    "name": o.name,
-                    "phone": o.phone,
-                    "city": o.city,
-                    "state": o.state,
-                    "active": o.active,
-                    "type": o.type,
-                    "org_id": o.org_id
-                },
-                "phone": u.phone,
-                "email": u.email,
-                "city": u.city,
-                "state": u.state,
-                "active": u.active
-            }
-            active_users.append(user_record)
-        return jsonify(active_users), 200
-    return jsonify("no active users found"), 404
+        return jsonify(users_schema.dump(users)), 200
+    
+    return jsonify("no users found", 404)
     
 
 
@@ -167,7 +98,7 @@ def update_user_by_id(user_id):
     
     db.session.commit()
     
-    return jsonify("User updated successfully"), 200
+    return jsonify("User updated successfully", user_schema.dump(user) ), 200
     
 
 @app_users.route('/users/active/<user_id>', methods=['POST'])

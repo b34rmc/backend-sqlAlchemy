@@ -1,7 +1,8 @@
 import psycopg2
 from flask import Flask, jsonify, request, Blueprint
-from models.org_model import Organizations
+from models.org_model import Organizations, org_schema, orgs_schema
 from db import db
+from app import get_org_from_object
 
 orgs = Blueprint('orgs', __name__)
 
@@ -17,63 +18,41 @@ def add_org():
     active = data.get('active')
     type = data.get('type')
     
-    new_org = Organizations(
-        name=name,
-        phone=phone,
-        city=city,
-        state=state,
-        active=active,
-        type=type
-    )
     
     if not all([name, phone, city, state, type]):
         return jsonify("all fields are required"), 400
     
+    new_org = Organizations(
+        name,
+        phone,
+        city,
+        state,
+        active,
+        type
+    )
     db.session.add(new_org)
     db.session.commit()
-    return jsonify('organization added'), 201
+    return jsonify(org_schema.dump(new_org)), 201
 
 
 @orgs.route('/orgs', methods=['GET'])
 def get_organizations():
-    orgs = db.session.query(Organizations).order_by(Organizations.org_id.asc()).all()     
-    if orgs:
-        all_orgs = []
-        for o in orgs:
-            org_record = {
-                "name": o.name,
-                "phone": o.phone,
-                "city": o.city,
-                "state": o.state,
-                "active": o.active,
-                "type": o.type,
-                "org_id": o.org_id
-            }
-            all_orgs.append(org_record)
-        return jsonify(all_orgs), 200
+    orgs = db.session.query(Organizations).all()
     
-    return jsonify("no organizations found", 404)
+    if orgs:
+        return jsonify(orgs_schema.dump(orgs)), 200
+    
+    return jsonify('no organizations found'), 404
 
 
 @orgs.route('/org/<org_id>', methods=['GET'])
 def get_org_by_id(org_id):
-    organization = db.session.query(Organizations).filter_by(org_id=org_id).all()
+    organization = db.session.query(Organizations).filter_by(org_id=org_id).first()
     
     if organization:
-        org = []
-        for o in organization:
-            org_record = {
-                "name": o.name,
-                "phone": o.phone,
-                "city": o.city,
-                "state": o.state,
-                "active": o.active,
-                "type": o.type,
-                "org_id": o.org_id
-            }
-            org.append(org_record)
-        return jsonify(org), 200
-    return jsonify("no organization found"), 404
+        return jsonify(org_schema.dump(organization)), 200
+    return jsonify("Organization not found"), 404
+
 
 
 @orgs.route('/orgs/active', methods=['GET'])
@@ -81,20 +60,10 @@ def get_active_orgs():
     active_orgs = db.session.query(Organizations).filter(Organizations.active == True).all()
     
     if active_orgs:
-        orgs = []
-        for o in active_orgs:
-            all_orgs = {
-                "name": o.name,
-                "phone": o.phone,
-                "city": o.city,
-                "state": o.state,
-                "active": o.active,
-                "type": o.type,
-                "org_id": o.org_id
-            }
-            orgs.append(all_orgs)
-        return jsonify(orgs), 200
-    return jsonify('no active orgs found'), 404
+        return jsonify(orgs_schema.dump(active_orgs)), 200
+    
+    return jsonify('no active organizations found'), 404
+
 
 
 @orgs.route('/org/update/<org_id>', methods=['POST'])
@@ -102,30 +71,24 @@ def update_org(org_id):
     org = Organizations.query.filter_by(org_id=org_id).first()
     
     if org:
-        data = request.get_json()
-        name = data.get('name')
-        phone = data.get('phone')
-        city = data.get('city')
-        state = data.get('state')
-        active = data.get('active')
-        type = data.get('type')
+        data = request.json
         
-        if name is not None:
-            org.name = name
-        if phone is not None:
-            org.phone = phone
-        if city is not None:
-            org.city = city
-        if state is not None:
-            org.state = state
-        if active is not None:
-            org.active = active
-        if type is not None:
-            org.type = type
+        if "name" in data:
+            org.name = data['name']
+        if "phone" in data:
+            org.phone = data['phone']
+        if "city" in data:
+            org.city = data['city']
+        if "state" in data:
+            org.state = data['state']
+        if "active" in data:
+            org.active = data['active']
+        if "type" in data:
+            org.type = data['type']
         
         db.session.commit()
         
-        return jsonify("Organization updated successfully"), 200
+        return jsonify("Organization updated successfully", org_schema.dump(org) ), 200
     return jsonify("Organization not found"), 404
 
 
